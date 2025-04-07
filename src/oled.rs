@@ -8,15 +8,14 @@
 
 use defmt_rtt as _;
 use embassy_stm32::{
-    bind_interrupts,
-    gpio::AnyPin,
-    i2c,
+    bind_interrupts, i2c,
     peripherals::{self, DMA1_CH6, DMA1_CH7, I2C1, PB6, PB7},
     time::Hertz,
-    Peripherals,
 };
 use panic_probe as _;
 use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306Async};
+
+use crate::PIPE;
 
 pub type I2cPins = (I2C1, PB6, PB7, DMA1_CH6, DMA1_CH7);
 
@@ -45,17 +44,10 @@ pub async fn oled_task(p: I2cPins) {
     display.init().await.unwrap();
     let _ = display.clear().await;
 
-    /* Endless loop */
     loop {
-        for c in 97..123 {
-            let _ = display
-                .write_str(unsafe { core::str::from_utf8_unchecked(&[c]) })
-                .await;
-        }
-        for c in 65..91 {
-            let _ = display
-                .write_str(unsafe { core::str::from_utf8_unchecked(&[c]) })
-                .await;
-        }
+        let mut buf = [0u8; 10];
+        PIPE.read(&mut buf).await;
+        let data = core::str::from_utf8(&buf).unwrap();
+        display.write_str(data).await.unwrap();
     }
 }

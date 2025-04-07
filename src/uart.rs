@@ -5,16 +5,17 @@
 //! (yellow) RXD -> PA10
 //! (green)  TXD -> PA9
 //! ```
+use crate::PIPE;
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_stm32::peripherals;
 use embassy_stm32::usart;
 use embassy_stm32::usart::BufferedUartRx;
-use embassy_stm32::Peripherals;
 use embassy_stm32::{bind_interrupts, usart::BufferedUart};
 use embassy_time::Timer;
 use embedded_io_async::{Read, Write};
 use static_cell::StaticCell;
+
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
@@ -35,15 +36,6 @@ pub async fn uart_task(p: UartPins, _spawner: Spawner) {
 
     let mut config = embassy_stm32::usart::Config::default();
     config.baudrate = USART_BAUD;
-
-    // let uart = BufferedUart::new(
-    //     p.UART5, // 1. UART 外设
-    //     Irqs,    // 2. 中断
-    //     p.PD2,   // 2. RX 引脚
-    //     p.PC12,  // 3. TX 引脚
-    //     tx_buf, rx_buf, config,
-    // )
-    // .expect("Create UART");
 
     let uart = BufferedUart::new(
         p.0,  // 1. UART 外设
@@ -72,7 +64,18 @@ async fn buffered_uart_reader(mut rx: BufferedUartRx<'static>) {
         let mut buf = [0; 10];
 
         rx.read_exact(&mut buf).await.unwrap();
-        info!("test");
+
+        // parse buf into utf8 string
+        match core::str::from_utf8(&buf) {
+            Ok(s) => {
+                info!("raw byte: {:?}", s.as_bytes());
+                PIPE.write(s.as_bytes()).await;
+                info!("RX: {}", s);
+            }
+            Err(_e) => {
+                info!("Utf8 error");
+            }
+        }
         Timer::after_secs(1).await;
     }
 }
