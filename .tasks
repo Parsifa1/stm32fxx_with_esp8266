@@ -1,0 +1,14 @@
+定义一个新任务
+[build]
+command:rust=cargo build --release
+cwd=$(VIM_FILEDIR)
+output=quickfix
+save=2
+
+[run]
+command:rust=cargo run --release
+output=terminal
+pos=toggleterm
+cwd=$(VIM_FILEDIR)
+save=2
+
