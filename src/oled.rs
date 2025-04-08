@@ -15,6 +15,7 @@ use embassy_stm32::{
     peripherals::{self, DMA1_CH6, DMA1_CH7, I2C1, PB6, PB7},
     time::Hertz,
 };
+use heapless::String;
 use panic_probe as _;
 use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306Async};
 
@@ -27,8 +28,8 @@ bind_interrupts!(struct Irqs {
     I2C1_ER => i2c::ErrorInterruptHandler<peripherals::I2C1>;
 });
 
-// static CLEAR_FLAG: AtomicBool = AtomicBool::new(false);
 pub static LED_FLAG: AtomicBool = AtomicBool::new(false);
+pub static PIPE_LEN: usize = 32;
 
 #[embassy_executor::task]
 pub async fn oled_task(p: I2cPins, _spawner: Spawner) {
@@ -52,10 +53,24 @@ pub async fn oled_task(p: I2cPins, _spawner: Spawner) {
 
     // _spawner.spawn(oled_clear()).unwrap();
     loop {
-        let mut buf = [0u8; 10];
+        let mut buf = [0u8; PIPE_LEN];
         let len = PIPE.read(&mut buf).await;
-        info!("read {} bytes from serial", len);
-        let data = core::str::from_utf8(&buf[..len]).unwrap();
+        let len2 = PIPE.try_read(&mut buf[len..]).unwrap_or(0);
+
+        info!("len: {}, len2: {}", len, len2);
+        let data = core::str::from_utf8(&buf[..len])
+            .expect("Invalid UTF-8")
+            .trim_end_matches("\0");
+
+        let mut string: String<32> = heapless::String::from(data);
+        let data = if data.ends_with('\n') {
+            string.as_str()
+        } else {
+            string.push('\n').unwrap();
+            string.as_str()
+        };
+
+        info!("buf: {:?}", data);
         if data.contains("clear") {
             info!("clear display");
             display.clear().await.unwrap();
@@ -65,6 +80,7 @@ pub async fn oled_task(p: I2cPins, _spawner: Spawner) {
             LED_FLAG.store(true, Relaxed);
             continue;
         }
+
         info!("write asyncly");
         display.write_str(data).await.unwrap();
         // if CLEAR_FLAG.load(Relaxed) {

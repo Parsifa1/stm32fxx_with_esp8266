@@ -22,7 +22,7 @@ async fn main(_spawner: Spawner) {
     info!("Hello, world!");
     let p = embassy_stm32::init(Default::default());
     let i2c_pin: I2cPins = (p.I2C1, p.PB6, p.PB7, p.DMA1_CH6, p.DMA1_CH7);
-    let uart_pin: UartPins = (p.USART1, p.PA10, p.PA9);
+    let uart_pin: UartPins = (p.USART1, p.PA10, p.PA9, p.DMA1_CH4, p.DMA1_CH5);
 
     _spawner.spawn(uart::uart_task(uart_pin, _spawner)).unwrap();
     _spawner.spawn(oled::oled_task(i2c_pin, _spawner)).unwrap();
@@ -32,12 +32,13 @@ async fn main(_spawner: Spawner) {
 #[embassy_executor::task]
 pub async fn led(pin: AnyPin) {
     let mut led = Output::new(pin, Level::Low, Speed::Low);
+    led.set_high();
     loop {
         if oled::LED_FLAG.load(Ordering::Relaxed) {
             info!("led toggled");
             led.toggle();
             oled::LED_FLAG.store(false, Ordering::Relaxed);
-            Timer::after_secs(1).await;
+            Timer::after_millis(50).await;
         } else {
             Timer::after_millis(10).await;
         }

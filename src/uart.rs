@@ -8,40 +8,42 @@
 use crate::PIPE;
 use defmt::*;
 use embassy_executor::Spawner;
-use embassy_stm32::peripherals;
-use embassy_stm32::usart;
-use embassy_stm32::usart::BufferedUartRx;
-use embassy_stm32::{bind_interrupts, usart::BufferedUart};
+use embassy_stm32::{
+    bind_interrupts,
+    mode::Async,
+    peripherals::{self},
+    usart::{self, Uart, UartRx},
+};
 use embassy_time::Timer;
-use embedded_io_async::{Read, Write};
-use static_cell::StaticCell;
+use embedded_io_async::Write;
 
 use {defmt_rtt as _, panic_probe as _};
 
 bind_interrupts!(struct Irqs {
-    USART1 => usart::BufferedInterruptHandler<peripherals::USART1>;
+    USART1 => usart::InterruptHandler<peripherals::USART1>;
 });
 
 const USART_BAUD: u32 = 115200;
 
-pub type UartPins = (peripherals::USART1, peripherals::PA10, peripherals::PA9);
+pub type UartPins = (
+    peripherals::USART1,
+    peripherals::PA10,
+    peripherals::PA9,
+    peripherals::DMA1_CH4,
+    peripherals::DMA1_CH5,
+);
 
 #[embassy_executor::task()]
 pub async fn uart_task(p: UartPins, _spawner: Spawner) {
-    static TX_BUF: StaticCell<[u8; 16]> = StaticCell::new();
-    let tx_buf = &mut TX_BUF.init([0; 16])[..];
-    static RX_BUF: StaticCell<[u8; 16]> = StaticCell::new();
-    let rx_buf = &mut RX_BUF.init([0; 16])[..];
-
     let mut config = embassy_stm32::usart::Config::default();
     config.baudrate = USART_BAUD;
 
-    let uart = BufferedUart::new(
+    let uart = Uart::new(
         p.0,  // 1. UART 外设
-        Irqs, // 2. 中断
         p.1,  // 2. RX 引脚
         p.2,  // 3. TX 引脚
-        tx_buf, rx_buf, config,
+        Irqs, // 2. 中断
+        p.3, p.4, config,
     )
     .expect("Create UART");
 
@@ -58,12 +60,12 @@ pub async fn uart_task(p: UartPins, _spawner: Spawner) {
 }
 
 #[embassy_executor::task]
-async fn buffered_uart_reader(mut rx: BufferedUartRx<'static>) {
+async fn buffered_uart_reader(mut rx: UartRx<'static, Async>) {
     info!("Reading...");
     loop {
-        let mut buf = [0; 10];
+        let mut buf = [0; 32];
 
-        rx.read_exact(&mut buf).await.unwrap();
+        rx.read_until_idle(&mut buf).await.unwrap();
 
         // parse buf into utf8 string
         match core::str::from_utf8(&buf) {
