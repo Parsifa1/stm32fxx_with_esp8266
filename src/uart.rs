@@ -22,13 +22,12 @@ bind_interrupts!(struct Irqs {
     USART1 => usart::BufferedInterruptHandler<peripherals::USART1>;
 });
 
-const USART_BAUD: u32 = 9600;
+const USART_BAUD: u32 = 115200;
 
 pub type UartPins = (peripherals::USART1, peripherals::PA10, peripherals::PA9);
 
 #[embassy_executor::task()]
 pub async fn uart_task(p: UartPins, _spawner: Spawner) {
-    info!("Hello World!");
     static TX_BUF: StaticCell<[u8; 16]> = StaticCell::new();
     let tx_buf = &mut TX_BUF.init([0; 16])[..];
     static RX_BUF: StaticCell<[u8; 16]> = StaticCell::new();
@@ -48,13 +47,14 @@ pub async fn uart_task(p: UartPins, _spawner: Spawner) {
 
     let (mut tx, rx) = uart.split();
     unwrap!(_spawner.spawn(buffered_uart_reader(rx)));
+    tx.write_all(b"ATE0\r\n").await.expect("开启回显失败");
     info!("Writing...");
-    loop {
-        let data = b"AT\r\n";
-        info!("TX {:?}", data);
-        tx.write_all(data).await.unwrap();
-        Timer::after_secs(1).await;
-    }
+    // loop {
+    //     let data = b"AT\r\n";
+    //     info!("TX {:?}", data);
+    //     tx.write_all(data).await.unwrap();
+    //     Timer::after_secs(1).await;
+    // }
 }
 
 #[embassy_executor::task]
@@ -69,6 +69,7 @@ async fn buffered_uart_reader(mut rx: BufferedUartRx<'static>) {
         match core::str::from_utf8(&buf) {
             Ok(s) => {
                 info!("raw byte: {:?}", s.as_bytes());
+                info!("write {} bytes to PIPE", s.len());
                 PIPE.write(s.as_bytes()).await;
                 info!("RX: {}", s);
             }

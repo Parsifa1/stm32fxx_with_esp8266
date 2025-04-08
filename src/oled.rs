@@ -6,7 +6,10 @@
 //! (green)  SCL -> PB6
 //! ```
 
+use core::sync::atomic::{AtomicBool, Ordering::Relaxed};
+use defmt::*;
 use defmt_rtt as _;
+use embassy_executor::Spawner;
 use embassy_stm32::{
     bind_interrupts, i2c,
     peripherals::{self, DMA1_CH6, DMA1_CH7, I2C1, PB6, PB7},
@@ -24,8 +27,11 @@ bind_interrupts!(struct Irqs {
     I2C1_ER => i2c::ErrorInterruptHandler<peripherals::I2C1>;
 });
 
+// static CLEAR_FLAG: AtomicBool = AtomicBool::new(false);
+pub static LED_FLAG: AtomicBool = AtomicBool::new(false);
+
 #[embassy_executor::task]
-pub async fn oled_task(p: I2cPins) {
+pub async fn oled_task(p: I2cPins, _spawner: Spawner) {
     let i2c = embassy_stm32::i2c::I2c::new(
         p.0,
         p.1,
@@ -44,10 +50,35 @@ pub async fn oled_task(p: I2cPins) {
     display.init().await.unwrap();
     let _ = display.clear().await;
 
+    // _spawner.spawn(oled_clear()).unwrap();
     loop {
         let mut buf = [0u8; 10];
-        PIPE.read(&mut buf).await;
-        let data = core::str::from_utf8(&buf).unwrap();
+        let len = PIPE.read(&mut buf).await;
+        info!("read {} bytes from serial", len);
+        let data = core::str::from_utf8(&buf[..len]).unwrap();
+        if data.contains("clear") {
+            info!("clear display");
+            display.clear().await.unwrap();
+            continue;
+        }
+        if data.contains("toggle") {
+            LED_FLAG.store(true, Relaxed);
+            continue;
+        }
+        info!("write asyncly");
         display.write_str(data).await.unwrap();
+        // if CLEAR_FLAG.load(Relaxed) {
+        //     info!("clear display");
+        //     display.clear().await.unwrap();
+        //     CLEAR_FLAG.store(false, Relaxed);
+        // }
     }
 }
+
+// #[embassy_executor::task]
+// pub async fn oled_clear() {
+//     loop {
+//         Timer::after_secs(10).await;
+//         CLEAR_FLAG.store(true, Relaxed);
+//     }
+// }
