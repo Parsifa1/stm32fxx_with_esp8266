@@ -9,7 +9,6 @@
 use core::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use defmt::*;
 use defmt_rtt as _;
-use embassy_executor::Spawner;
 use embassy_stm32::{
     bind_interrupts, i2c,
     peripherals::{self, DMA1_CH6, DMA1_CH7, I2C1, PB6, PB7},
@@ -19,7 +18,7 @@ use heapless::String;
 use panic_probe as _;
 use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306Async};
 
-use crate::PIPE;
+use crate::RX_PIPE;
 
 pub type I2cPins = (I2C1, PB6, PB7, DMA1_CH6, DMA1_CH7);
 
@@ -32,7 +31,7 @@ pub static LED_FLAG: AtomicBool = AtomicBool::new(false);
 pub static PIPE_LEN: usize = 32;
 
 #[embassy_executor::task]
-pub async fn oled_task(p: I2cPins, _spawner: Spawner) {
+pub async fn oled_task(p: I2cPins) {
     let i2c = embassy_stm32::i2c::I2c::new(
         p.0,
         p.1,
@@ -54,8 +53,8 @@ pub async fn oled_task(p: I2cPins, _spawner: Spawner) {
     // _spawner.spawn(oled_clear()).unwrap();
     loop {
         let mut buf = [0u8; PIPE_LEN];
-        let len = PIPE.read(&mut buf).await;
-        let len2 = PIPE.try_read(&mut buf[len..]).unwrap_or(0);
+        let len = RX_PIPE.read(&mut buf).await;
+        let len2 = RX_PIPE.try_read(&mut buf[len..]).unwrap_or(0);
 
         info!("len: {}, len2: {}", len, len2);
         let data = core::str::from_utf8(&buf[..len])
