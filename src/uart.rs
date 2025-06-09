@@ -5,7 +5,7 @@
 //! (yellow) RXD -> PA10
 //! (green)  TXD -> PA9
 //! ```
-use crate::{oled::PIPE_LEN, RX_PIPE, TX_PIPE};
+use crate::{RX_PIPE, TX_PIPE};
 use defmt::*;
 use embassy_executor::Spawner;
 use embassy_stm32::{
@@ -51,12 +51,13 @@ pub async fn uart_task(p: UartPins, _spawner: Spawner) {
     unwrap!(_spawner.spawn(buffered_uart_reader(rx)));
     tx.write_all(b"ATE0\r\n").await.expect("开启回显失败");
     info!("Writing...");
-    let mut buf = [0u8; PIPE_LEN];
-    let len = TX_PIPE.read(&mut buf).await;
+    let mut buf = [0u8; 8];
 
     loop {
+        let len = TX_PIPE.read(&mut buf).await;
         if len != 0 {
             tx.write_all(&buf[..len]).await.expect("Write failed");
+            info!("write to uart: {}", buf)
         }
         Timer::after_micros(200).await;
     }
