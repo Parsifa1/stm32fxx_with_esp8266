@@ -2,8 +2,8 @@
 //!      ESP8266 -> STM32
 //! (black)  GND -> GND
 //! (red)    +5V -> VCC
-//! (yellow) RXD -> PA10
-//! (green)  TXD -> PA9
+//! (yellow) RXD -> PA9
+//! (green)  TXD -> PA10
 //! ```
 use crate::{RX_PIPE, TX_PIPE};
 use defmt::*;
